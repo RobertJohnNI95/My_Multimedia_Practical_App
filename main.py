@@ -369,8 +369,13 @@ class ImageProcessingApp:
             else:
                 messagebox.showwarning("Warning", "Dithering is only applied on grayscale images\nit won\'t be applied on current color mode")
         elif selected_effect == "Median Cut":
-            # Not Added Yet
-            messagebox.showwarning("Work in progress", "This function is not yet ready")
+            if self.mode_combobox.get() == "Grayscale" \
+            or self.mode_combobox.get() == "Inverse Grayscale" \
+            or self.mode_combobox.get() == "Binary" \
+            or self.mode_combobox.get() == "Inverse Binary":
+                messagebox.showwarning("Warning", "Dithering is not applied on grayscale or binary images.\nColor images only")
+            else:
+                self.apply_median_cut(16)
             return
     
     def apply_quantization(self, event):
@@ -430,6 +435,42 @@ class ImageProcessingApp:
         self.processed_image = dithered_img
         self.refresh_image()
 
+    def median_cut(self, colors, num_colors):
+        boxes = [colors]
+        while len(boxes) < num_colors:
+            new_boxes = []
+            for box in boxes:
+                if len(box) == 0:
+                    continue
+                box_array = np.array(box)
+                min_val = box_array.min(axis=0)
+                max_val = box_array.max(axis=0)
+                ranges = max_val - min_val
+                split_dim = np.argmax(ranges)
+                sorted_box = box_array[box_array[:, split_dim].argsort()]
+                median_index = len(sorted_box) // 2
+                new_boxes.append(sorted_box[:median_index])
+                new_boxes.append(sorted_box[median_index:])
+            boxes = new_boxes
+        quantized_colors = []
+        for box in boxes:
+            if len(box) > 0:
+                avg_color = box.mean(axis=0)
+                quantized_colors.append(avg_color)
+        return np.array(quantized_colors)
+    
+    def apply_median_cut(self, num_colors):
+        img = Image.fromarray(self.image)
+        colors = np.array(img).reshape(-1, 3)
+        quantized_colors = self.median_cut(colors, num_colors)
+        quantized_img = np.zeros(colors.shape, dtype=np.uint8)
+        for i, color in enumerate(colors):
+            distances = np.linalg.norm(quantized_colors - color, axis=1)
+            nearest_color_index = np.argmin(distances)
+            quantized_img[i] = quantized_colors[nearest_color_index]
+        quantized_img = quantized_img.reshape(img.size[1], img.size[0], 3)
+        self.processed_image = np.uint8(Image.fromarray(quantized_img))
+        self.refresh_image()
 
     def update_binary_image(self, event):
         if self.image is None:
