@@ -31,7 +31,7 @@ def bayer_matrix(n):
 class ImageProcessingApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Image Processing App")
+        self.root.title("Multimedia Image Processing App")
         self.root.resizable(False, False)
         self.image = None
         self.processed_image = None
@@ -76,7 +76,7 @@ class ImageProcessingApp:
         self.combo_row = tk.Frame(self.control_frame)
         self.color_label = tk.Label(self.combo_row, text="Color")
         self.color_label.pack(side=tk.LEFT, padx=5)
-        color_list = ["Original Colors", "Negative (CMY)", "Grayscale", "Inverse Grayscale", "Binary", "Inverse Binary", "HSV", "LAB"]
+        color_list = ["Original Colors (RGB)", "Negative (CMY)", "Grayscale", "Inverse Grayscale", "Binary", "Inverse Binary", "HSV", "LAB"]
         self.mode_combobox = ttk.Combobox(self.combo_row, values=color_list, state=tk.DISABLED)
         self.mode_combobox.pack(side=tk.LEFT, padx=5, pady=5)
         self.mode_combobox.bind("<<ComboboxSelected>>", self.apply_mode)
@@ -88,13 +88,17 @@ class ImageProcessingApp:
         self.effect_combobox.pack(side=tk.LEFT, padx=5, pady=5)
         self.effect_combobox.bind("<<ComboboxSelected>>", self.enable_effect)
 
-        quantization_list = ["32-Bit", "16-Bit", "8-Bit", "4-Bit"]
+        quantization_list = ["Off", "4-Bit", "8-Bit", "16-Bit", "32-Bit"]
         self.quantization_combobox = ttk.Combobox(self.combo_row, values=quantization_list)
         self.quantization_combobox.bind("<<ComboboxSelected>>", self.apply_quantization)
 
-        dithering_list = ["2x2", "3x3", "4x4", "8x8", "16x16", "32x32", "64x64"]
+        dithering_list = ["Off", "2x2", "3x3", "4x4", "8x8", "16x16", "32x32", "64x64"]
         self.dithering_combobox = ttk.Combobox(self.combo_row, values=dithering_list)
         self.dithering_combobox.bind("<<ComboboxSelected>>", self.apply_dithering)
+
+        median_cut_list = ["Off", "8 Colors", "16 Colors", "32 Colors", "64 Colors"]
+        self.median_cut_combobox = ttk.Combobox(self.combo_row, values=median_cut_list)
+        self.median_cut_combobox.bind("<<ComboboxSelected>>", self.apply_median_cut)
         self.combo_row.grid(row=2, column=1)
 
         # Effect Row (Threshold)
@@ -135,10 +139,15 @@ class ImageProcessingApp:
         self.refresh_image()
         self.dx = 0
         self.dy = 0
-        self.mode_combobox.set('Original Colors')
+        self.mode_combobox.set('Original Colors (RGB)')
         self.effect_combobox.set('None')
-        self.quantization_combobox.set('32-Bit')
-        self.dithering_combobox.set('2x2')
+        self.quantization_combobox.set('Off')
+        self.quantization_combobox.pack_forget()
+        self.dithering_combobox.set('Off')
+        self.dithering_combobox.pack_forget()
+        self.median_cut_combobox.set('Off')
+        self.median_cut_combobox.pack_forget()
+        self.threshold_slider.set(100)
         self.threshold_slider.pack_forget()
 
     def refresh_image(self):
@@ -331,7 +340,7 @@ class ImageProcessingApp:
         self.threshold_slider.pack_forget()  # Hide the slider initially
         selected_mode = self.mode_combobox.get()
 
-        if selected_mode == "Original Colors":
+        if selected_mode == "Original Colors (RGB)":
             self.show_original()
         elif selected_mode == "Negative (CMY)":
             self.apply_negative()
@@ -351,14 +360,18 @@ class ImageProcessingApp:
             self.apply_lab()
         self.enable_effect(None)
     
+    def disable_effect(self):
+        self.processed_image = self.image
+        self.refresh_image()
+    
     def enable_effect(self, event):
         self.quantization_combobox.pack_forget()
         self.dithering_combobox.pack_forget()
+        self.median_cut_combobox.pack_forget()
         selected_effect = self.effect_combobox.get()
         
         if selected_effect == "None":
-            self.processed_image = self.image
-            self.refresh_image()
+            self.disable_effect()
         elif selected_effect == "Quantization":
             self.apply_quantization(None)
             self.quantization_combobox.pack(side=tk.LEFT, padx=5, pady=5)
@@ -373,15 +386,18 @@ class ImageProcessingApp:
             or self.mode_combobox.get() == "Inverse Grayscale" \
             or self.mode_combobox.get() == "Binary" \
             or self.mode_combobox.get() == "Inverse Binary":
-                messagebox.showwarning("Warning", "Dithering is not applied on grayscale or binary images.\nColor images only")
+                messagebox.showwarning("Warning", "Median cut is not applied on grayscale or binary images.\nColor images only")
             else:
-                self.apply_median_cut(16)
+                self.median_cut_combobox.pack(side=tk.LEFT, padx=5, pady=5)
             return
     
     def apply_quantization(self, event):
         q_option = self.quantization_combobox.get()
 
-        if q_option == "32-Bit":
+        if q_option == "Off":
+            self.disable_effect()
+            return
+        elif q_option == "32-Bit":
             n = 5
         elif q_option == "16-Bit":
             n = 4
@@ -400,7 +416,10 @@ class ImageProcessingApp:
         d_option = self.dithering_combobox.get()
         dithering_matrix = []
 
-        if d_option == "2x2":
+        if d_option == "Off":
+            self.disable_effect()
+            return
+        elif d_option == "2x2":
             dithering_matrix = bayer_matrix(0)
         elif d_option == "3x3":
             dithering_matrix = [
@@ -459,7 +478,7 @@ class ImageProcessingApp:
                 quantized_colors.append(avg_color)
         return np.array(quantized_colors)
     
-    def apply_median_cut(self, num_colors):
+    def median_cut_quantize(self, num_colors):
         img = Image.fromarray(self.image)
         colors = np.array(img).reshape(-1, 3)
         quantized_colors = self.median_cut(colors, num_colors)
@@ -471,6 +490,26 @@ class ImageProcessingApp:
         quantized_img = quantized_img.reshape(img.size[1], img.size[0], 3)
         self.processed_image = np.uint8(Image.fromarray(quantized_img))
         self.refresh_image()
+    
+    def apply_median_cut(self, event):
+        num_colors = self.median_cut_combobox.get()
+        if num_colors == "Off":
+            self.disable_effect()
+            return
+        
+        qa = messagebox.askyesno("Caution", "Applying median cut can cause the program to freeze for a moment.\nAre you sure you want to proceed?")
+        if not qa:
+            self.median_cut_combobox.set('(Failed)')
+            return
+        
+        if num_colors == "8 Colors":
+            self.median_cut_quantize(8)
+        elif num_colors == "16 Colors":
+            self.median_cut_quantize(16)
+        elif num_colors == "32 Colors":
+            self.median_cut_quantize(32)
+        elif num_colors == "64 Colors":
+            self.median_cut_quantize(64)
 
     def update_binary_image(self, event):
         if self.image is None:
@@ -493,7 +532,7 @@ class ImageProcessingApp:
 
             # Create a new Tkinter window for the histogram
             hist_window = tk.Toplevel(root)
-            hist_window.title("Normal Grayscale Image Histogram")
+            hist_window.title("Grayscale Image Histogram")
             hist_window.resizable(False, False)
 
             gray_hist = cv2.calcHist([gray_img], [0], None, [256], [0, 255])
@@ -523,7 +562,7 @@ class ImageProcessingApp:
             img = self.original_image
             # Create a new Tkinter window for the histogram
             hist_window = tk.Toplevel(root)
-            hist_window.title("Normal RGB Image Histogram")
+            hist_window.title("RGB Image Histogram")
             hist_window.resizable(False, False)
 
             # Plot the histogram using Matplotlib
