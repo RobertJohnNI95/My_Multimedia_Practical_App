@@ -608,7 +608,10 @@ class ImageProcessingApp:
                 for i in range(0, img_size[0], 8):
                     for j in range(0, img_size[1], 8):
                         dct_result[i:(i+8), j:(j+8)] = dct_2d(self.image[i:(i+8), j:(j+8)])
-                self.processed_image = np.uint8(dct_result)
+                dct_max = np.max(dct_result)
+                thresh = 0.012
+                dct_thresh = dct_result * (abs(dct_result) > thresh * dct_max)
+                self.processed_image = np.uint8(dct_thresh)
                 self.refresh_image()
                 self.mode_combobox.set('(Compression)')
                 compression_window.destroy()
