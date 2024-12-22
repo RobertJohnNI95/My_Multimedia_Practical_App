@@ -3,10 +3,10 @@ from tkinter import ttk
 from tkinter import filedialog, messagebox, Scale
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from PIL import Image, ImageTk, ImageFilter
+from PIL import Image, ImageTk
 import cv2
 import numpy as np
-import scipy.fft
+import scipy
 import scipy.fftpack
 import pywt.data
 
@@ -54,7 +54,7 @@ class ImageProcessingApp:
 
         self.control_frame = tk.Frame(root)
 
-        # Button Row (Load, Save)
+        # Button Row
         self.btn_row = tk.Frame(self.control_frame)
         self.btn_load = tk.Button(self.btn_row, text="Load Image", command=self.load_image)
         self.btn_load.pack(side=tk.LEFT, padx=5, pady=5)
@@ -114,7 +114,7 @@ class ImageProcessingApp:
         self.init_label.pack(side=tk.LEFT, padx=5, pady=19)
         self.effect_row.grid(row=3, column=1)
 
-        # Histogram Button Row
+        # Button Row 2 (Histogram + Compression)
         self.btn_row2 = tk.Frame(self.control_frame)
         self.btn_hist_gray = tk.Button(self.btn_row2, text="Show Grayscale Histogram", command=self.show_gray_hist, state=tk.DISABLED)
         self.btn_hist_gray.pack(side=tk.LEFT, padx=5, pady=5)
@@ -124,6 +124,9 @@ class ImageProcessingApp:
 
         self.btn_compress = tk.Button(self.btn_row2, text="Compress Image", command=self.open_compression_window, state=tk.DISABLED)
         self.btn_compress.pack(side=tk.LEFT, padx=5, pady=5)
+
+        # self.btn_decompress = tk.Button(self.btn_row2, text='Decompress Image', command=self.open_decompression_window, state=tk.DISABLED)
+        # self.btn_decompress.pack(side=tk.LEFT, padx=5, pady=5)    # Unused
         self.btn_row2.grid(row=4, column=1)
 
         self.control_frame.grid(row=2, column=1)
@@ -189,6 +192,7 @@ class ImageProcessingApp:
         self.mode_combobox.config(state=state)
         self.effect_combobox.config(state=state)
         self.btn_compress.config(state=state)
+        # self.btn_decompress.config(state=state) # Unused
     
     def rotate_image(self):
         if self.image is not None:
@@ -611,13 +615,13 @@ class ImageProcessingApp:
                 dct_max = np.max(dct_result)
                 thresh = 0.012
                 dct_thresh = dct_result * (abs(dct_result) > thresh * dct_max)
-                self.processed_image = np.uint8(dct_thresh)
+                self.processed_image = self.image = np.uint8(dct_thresh)
                 self.refresh_image()
                 self.mode_combobox.set('(Compression)')
                 compression_window.destroy()
             elif technique == "DWT":
                 if self.mode_combobox.get() == "Grayscale" or self.mode_combobox.get() == "Inverse Grayscale":
-                    self.processed_image = np.uint8(pywt.dwt2(self.image, 'db5')[0])
+                    self.processed_image = self.image = np.uint8(pywt.dwt2(self.image, 'db5')[0])
                     self.refresh_image()
                     self.mode_combobox.set('(Compression)')
                     compression_window.destroy()
@@ -626,7 +630,7 @@ class ImageProcessingApp:
                     return
             elif technique == "Haar DWT":
                 if self.mode_combobox.get() == "Grayscale" or self.mode_combobox.get() == "Inverse Grayscale":
-                    self.processed_image = np.uint8(pywt.dwt2(self.image, 'haar')[0])
+                    self.processed_image = self.image = np.uint8(pywt.dwt2(self.image, 'haar')[0])
                     self.refresh_image()
                     self.mode_combobox.set('(Compression)')
                     compression_window.destroy()
@@ -635,7 +639,7 @@ class ImageProcessingApp:
                     return
             elif technique == "Wavedec":
                 if self.mode_combobox.get() == "Grayscale" or self.mode_combobox.get() == "Inverse Grayscale":
-                    self.processed_image = np.uint8(pywt.wavedec2(self.image, 'db5', level=3)[0])
+                    self.processed_image = self.image = np.uint8(pywt.wavedec2(self.image, 'db5', level=3)[0])
                     self.refresh_image()
                     self.mode_combobox.set('(Compression)')
                     compression_window.destroy()
@@ -658,12 +662,57 @@ class ImageProcessingApp:
         technique_list = ['DCT', 'DWT', 'Haar DWT', 'Wavedec']
         technique_combobox = ttk.Combobox(select_frame, values=technique_list)
         technique_combobox.pack(side=tk.LEFT, padx=5, pady=5)
+        technique_combobox.set('DCT')
         select_frame.grid(row=1, column=1)
 
         btn_frame = tk.Frame(compression_window)
         tk.Button(btn_frame, text="OK", command=apply_compression).pack(side=tk.LEFT, padx=5, pady=5)
         tk.Button(btn_frame, text="Cancel", command=cancel_compression).pack(side=tk.LEFT, padx=5, pady=5)
         btn_frame.grid(row=2, column=1)
+    
+    """ DECOMPRESSION FEATURE UNUSED """
+    """
+    def open_decompression_window(self):
+        def idct_2d(arr):
+            idct_rows = scipy.fftpack.idct(arr, axis=0, norm='ortho')
+            return scipy.fftpack.idct(idct_rows, axis=1, norm='ortho')
+
+        def apply_decompression():
+            technique = technique_combobox.get()
+            if technique == "IDCT":
+                img_size = self.image.shape
+                idct_result = np.zeros(img_size)
+                for i in range(0, img_size[0], 8):
+                    for j in range(0, img_size[1], 8):
+                        idct_result[i:(i+8), j:(j+8)] = idct_2d(self.image[i:(i+8), j:(j+8)])
+                self.processed_image = self.image = np.uint8(idct_result)
+                self.refresh_image()
+                self.mode_combobox.set('(Decompression)')
+                decompression_window.destroy()
+            else:
+                messagebox.showerror("Error", "Decompression Failed!")
+                return
+
+        def cancel_decompression():
+            decompression_window.destroy()  # Close the resize window
+
+        decompression_window = tk.Toplevel(root)
+        decompression_window.title("Decompress Image")
+        decompression_window.resizable(False, False)
+
+        select_frame = tk.Frame(decompression_window)
+        tk.Label(select_frame, text="Decompression Technique").pack(side=tk.LEFT, padx=5, pady=5)
+        technique_list = ['IDCT']
+        technique_combobox = ttk.Combobox(select_frame, values=technique_list)
+        technique_combobox.pack(side=tk.LEFT, padx=5, pady=5)
+        technique_combobox.set('IDCT')
+        select_frame.grid(row=1, column=1)
+
+        btn_frame = tk.Frame(decompression_window)
+        tk.Button(btn_frame, text="OK", command=apply_decompression).pack(side=tk.LEFT, padx=5, pady=5)
+        tk.Button(btn_frame, text="Cancel", command=cancel_decompression).pack(side=tk.LEFT, padx=5, pady=5)
+        btn_frame.grid(row=2, column=1)
+    """
     
     def save_image(self):
         if not self.processed_image.any:
